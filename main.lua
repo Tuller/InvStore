@@ -57,24 +57,34 @@ local function isEquippableBag(bagID)
     return bagID > BACKPACK_CONTAINER and bagID <= NUM_BANKBAGSLOTS
 end
 
+local function getCompressedInfo(link)
+    local result = tonumber(link)
+
+    if not result then
+        local linkData = link:match("|H(.-)|h")
+
+        -- grab an itemID from an itemID there's nothing special about this item
+        -- that is, all non itemID fields are set to default values
+        local itemID = linkData:match("^item:(%d+)::::::::(%d+):(%d+)(:+)$")
+        if itemID then
+            result = tonumber(itemID)
+        else
+            result = linkData
+        end
+    end
+
+    return result
+end
+
 local function saveItemInfo(t, index, itemIDOrLink, itemCount)
     if not itemIDOrLink then
         t[index] = nil
         return
     end
 
-    local item = tonumber(itemIDOrLink)
-    if not item then
-        local itemString = itemIDOrLink:match("|H(.-)|h")
-
-        -- try and shorten an itemString if all of the fields except for
-        -- specID and unitlevel are blank
-        local itemID = itemString:match("^item:(%d+)::::::::(%d+):(%d+)(:+)$")
-
-        item = itemID or itemString
-    end
-
+    local item = getCompressedInfo(itemIDOrLink)
     itemCount = tonumber(itemCount) or 0
+
     if itemCount > 1 then
         t[index] = ("%s;%d"):format(item, itemCount)
     else
@@ -200,7 +210,7 @@ function Addon:PLAYER_MONEY()
     self:SavePlayerMoney()
 end
 
-function Addon:PLAYER_EQUIPMENT_CHANGED(slot)
+function Addon:PLAYER_EQUIPMENT_CHANGED(msg, slot)
     self:SaveEquippedItem(slot)
 end
 
@@ -466,9 +476,7 @@ end
 -- void storage
 local GetVoidItemInfo = _G.GetVoidItemInfo
 
-Addon.SaveVoidStorageItems =
-    debounce(
-    0.25,
+Addon.SaveVoidStorageItems = debounce(0.25,
     function(self)
         for page = 1, VOID_STORAGE_PAGES do
             for slot = 1, VOID_STORAGE_MAX do
@@ -532,7 +540,7 @@ function Addon:SaveGuildBankTab(id)
         return
     end
 
-    local tab = self:SaveGuldBankTabInfo(id)
+    local tab = self:CreateOrUpdateGuildTab(id)
     if not tab then
         return
     end
@@ -542,7 +550,7 @@ function Addon:SaveGuildBankTab(id)
     end
 end
 
-function Addon:SaveGuldBankTabInfo(tabID)
+function Addon:CreateOrUpdateGuildTab(tabID)
     local name, icon, isViewable = GetGuildBankTabInfo(tabID)
     local tab = nil
 

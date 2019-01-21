@@ -7,22 +7,46 @@ local ItemCache = LibStub:NewLibrary(AddonName .. "ItemCache", 0)
 ItemCache.IsItemCache = true
 
 -- helpers
+local itemInfos = setmetatable({}, {
+    __index = function(self, itemData)
+        local result
+        if type(itemData) == "number" then
+            result = {
+                id = itemData,
+                cached = true,
+                count = 1
+            }
+        else
+            local itemStringOrID = strsplit(";", itemData)
+            local itemID = tonumber(itemStringOrID)
+
+            if itemID then
+                result = {
+                    id = itemID,
+                    cached = true,
+                    count = 1
+                }
+            else
+                result = {
+                    id = tonumber(itemStringOrID:match("^item:(%d+)")),
+                    link = itemStringOrID,
+                    cached = true,
+                    count = 1
+                }
+            end
+        end
+
+        self[itemData] = result
+        return result
+    end,
+
+    mode = "kv"
+})
+
 local function getItemInfo(itemData)
-    if not itemData then
-        return
+    if itemData then
+        return itemInfos[itemData]
     end
-
-    if type(itemData) == "number" then
-        return {
-            id = itemData
-        }
-    end
-
-    local itemStringOrID, itemCount = itemData:split(";")
-    return {
-        link = tonumber(itemStringOrID) or itemStringOrID,
-        count = tonumber(itemCount)
-    }
 end
 
 local function getPlayer(realm, name)
@@ -73,6 +97,7 @@ function ItemCache:GetPlayer(realm, name)
 
     if player then
         return {
+            cached = true,
             money = player.money,
             faction = player.faction,
             guild = player.guild,
@@ -113,12 +138,11 @@ function ItemCache:GetGuild(realm, name)
 
     if guild then
         return {
+            cached = true,
+            isguild = true,
             money = guild.money,
             faction = guild.faction,
-            guild = guild.guild,
-            class = guild.class,
-            gender = guild.gender,
-            race = guild.race
+            guild = guild.guild
         }
     end
 end
