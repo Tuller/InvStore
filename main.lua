@@ -65,7 +65,7 @@ local function getCompressedInfo(link)
 
         -- grab an itemID from an itemID there's nothing special about this item
         -- that is, all non itemID fields are set to default values
-        local itemID = linkData:match("^item:(%d+)::::::::(%d+):(%d+)(:+)$")
+        local itemID = linkData:match("^item:(%d+):::::::([%d%-]*):(%d+):(%d+)(:+)$")
         if itemID then
             result = tonumber(itemID)
         else
@@ -92,9 +92,11 @@ local function saveItemInfo(t, index, itemIDOrLink, itemCount)
     end
 end
 
-local function getGuildID(name, realm)
+local function getPlayerGuildID(player)
+    local name = player and player.name
+
     if name then
-        return ("%s;%s"):format(name, realm)
+        return ("%s;%s"):format(name, player.realmID)
     end
 end
 
@@ -113,6 +115,9 @@ end
 function Addon:OnEnable()
     self.playerID = UnitGUID("player")
     self.player = self:CreateOrUpdatePlayerInfo()
+
+    self.realmID = (select(2, UnitFullName("player")))
+    self.realm = self:CreateOrUpdateRealmInfo()
 
     self:SaveEquippedItems()
     self:SaveUpdatedBags()
@@ -302,6 +307,7 @@ function Addon:LoadDatabase()
             settings = {},
             guilds = {},
             players = {},
+            realms = {},
             version = DB_VERSION
         }
 
@@ -324,12 +330,9 @@ end
 -- player data
 function Addon:CreateOrUpdatePlayerInfo()
     local playerID = self.playerID
-    local _, classId, _, raceId, gender, name, realm = GetPlayerInfoByGUID(playerID)
+    local _, classId, _, raceId, gender = GetPlayerInfoByGUID(playerID)
     local _, faction = UnitFactionGroup("player")
-
-    if realm == "" then
-        realm = GetRealmName()
-    end
+    local name, realmID = UnitFullName("player")
 
     local player = self.db.players[playerID]
     if not player then
@@ -345,7 +348,7 @@ function Addon:CreateOrUpdatePlayerInfo()
     player.gender = gender
     player.name = name
     player.race = raceId
-    player.realm = realm
+    player.realmID = realmID
     player.money = GetMoney()
 
     return player
@@ -369,7 +372,7 @@ end
 
 -- guild data
 function Addon:UpdateGuildID()
-    local guildID = getGuildID(self.player.guild, self.player.realm)
+    local guildID = getPlayerGuildID(self.player)
 
     if self.guildID ~= guildID then
         self.guildID = guildID
@@ -389,7 +392,7 @@ function Addon:CreateOrUpdateGuildInfo()
     if not guild then
         guild = {
             name = self.player.guild,
-            realm = self.player.realm,
+            realmID = self.player.realmID,
             money = GetGuildBankMoney() or 0,
             inventory = {}
         }
@@ -593,7 +596,7 @@ function Addon:SaveGuildBankMoney()
 end
 
 function Addon:GetOrCreateGuildInfo()
-    local guildID = self:GetGuildID(self.player.guild, self.player.realm)
+    local guildID = getPlayerGuildID(self.player)
     if not guildID then
         return
     end
@@ -603,7 +606,7 @@ function Addon:GetOrCreateGuildInfo()
     if not guild then
         guild = {
             name = self.player.guild,
-            realm = self.player.realm,
+            realmID = self.realmID,
             money = GetGuildBankMoney() or 0,
             inventory = {}
         }
@@ -612,4 +615,38 @@ function Addon:GetOrCreateGuildInfo()
     end
 
     return guild
+end
+
+-- realms
+function Addon:CreateOrUpdateRealmInfo()
+    local realms = self.db.realms
+    if not realms then
+        realms = {}
+        self.db.realms = realms
+    end
+
+    local realmID = self.realmID
+    local realm = realms[realmID]
+    if not realm then
+        realm = { id = realmID }
+        realms[realmID] = realm
+    end
+
+    realm.name = GetRealmName()
+
+    local links
+    local connectedRealms = GetAutoCompleteRealms()
+    if connectedRealms then
+        for _, connectedRealmID in pairs(connectedRealms) do
+            if connectedRealmID ~= realmID then
+                links = links or {}
+                links[connectedRealmID] = true
+            end
+        end
+    end
+
+    realm.links = links
+
+    self.realm = realm
+    return realm
 end
